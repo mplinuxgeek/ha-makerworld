@@ -28,21 +28,48 @@ class MakerWorldSensorDescription(SensorEntityDescription):
 
 
 SUMMARY_SENSORS = [
-    MakerWorldSensorDescription(key="makerworld_likes", name="Likes", data_key="Likes"),
     MakerWorldSensorDescription(
-        key="makerworld_downloads", name="Downloads", data_key="Downloads"
+        key="makerworld_likes",
+        name="Likes",
+        data_key="Likes",
+        icon="mdi:thumb-up",
     ),
-    MakerWorldSensorDescription(key="makerworld_prints", name="Prints", data_key="Prints"),
-    MakerWorldSensorDescription(key="makerworld_points", name="Points", data_key="Points"),
     MakerWorldSensorDescription(
-        key="makerworld_followers", name="Followers", data_key="Followers"
+        key="makerworld_downloads",
+        name="Downloads",
+        data_key="Downloads",
+        icon="mdi:download",
+    ),
+    MakerWorldSensorDescription(
+        key="makerworld_prints",
+        name="Prints",
+        data_key="Prints",
+        icon="mdi:printer-3d-nozzle-outline",
+    ),
+    MakerWorldSensorDescription(
+        key="makerworld_points",
+        name="Points",
+        data_key="Points",
+        icon="mdi:star-four-points-circle-outline",
+    ),
+    MakerWorldSensorDescription(
+        key="makerworld_followers",
+        name="Followers",
+        data_key="Followers",
+        icon="mdi:account-group",
     ),
     MakerWorldSensorDescription(
         key="makerworld_boosts_received",
         name="Boosts Received",
         data_key="Boosts Received",
+        icon="mdi:car-turbocharger",
     ),
-    MakerWorldSensorDescription(key="makerworld_models", name="Models", data_key="Models"),
+    MakerWorldSensorDescription(
+        key="makerworld_models",
+        name="Models",
+        data_key="Models",
+        icon="mdi:cube-outline",
+    ),
 ]
 
 TOP_SENSORS = [
@@ -51,18 +78,21 @@ TOP_SENSORS = [
         name="Most Liked Model",
         data_key="Top",
         top_key="Most Liked Model",
+        icon="mdi:finance",
     ),
     MakerWorldSensorDescription(
         key="makerworld_most_downloaded_model",
         name="Most Downloaded Model",
         data_key="Top",
         top_key="Most Downloaded Model",
+        icon="mdi:download-multiple",
     ),
     MakerWorldSensorDescription(
         key="makerworld_most_printed_model",
         name="Most Printed Model",
         data_key="Top",
         top_key="Most Printed Model",
+        icon="mdi:printer-3d",
     ),
 ]
 
@@ -77,6 +107,7 @@ OTHER_DIAGNOSTIC_SENSORS = [
         key="makerworld_badges",
         name="Badges",
         data_key="Diagnostics",
+        icon="mdi:hexagon-multiple-outline",
     ),
 ]
 
