@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -33,42 +34,49 @@ SUMMARY_SENSORS = [
         name="Likes",
         data_key="Likes",
         icon="mdi:thumb-up",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_downloads",
         name="Downloads",
         data_key="Downloads",
         icon="mdi:download",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_prints",
         name="Prints",
         data_key="Prints",
         icon="mdi:printer-3d-nozzle-outline",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_points",
         name="Points",
         data_key="Points",
         icon="mdi:star-four-points-circle-outline",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_followers",
         name="Followers",
         data_key="Followers",
         icon="mdi:account-group",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_boosts_received",
         name="Boosts Received",
         data_key="Boosts Received",
         icon="mdi:car-turbocharger",
+        state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
         key="makerworld_models",
         name="Models",
         data_key="Models",
         icon="mdi:cube-outline",
+        state_class=SensorStateClass.TOTAL,
     ),
 ]
 
