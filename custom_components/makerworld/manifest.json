@@ -1,0 +1,10 @@
+{
+  "domain": "makerworld",
+  "name": "MakerWorld",
+  "documentation": "https://github.com/mplinuxgeek/ha-makerworld",
+  "issue_tracker": "https://github.com/mplinuxgeek/ha-makerworld/issues",
+  "codeowners": ["@mplinuxgeek"],
+  "config_flow": true,
+  "requirements": ["beautifulsoup4==4.12.3"],
+  "version": "0.1.0"
+}
