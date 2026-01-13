@@ -68,7 +68,7 @@ SUMMARY_SENSORS = [
         key="makerworld_boosts_received",
         name="Boosts Received",
         data_key="Boosts Received",
-        icon="mdi:car-turbocharger",
+        icon="mdi:rocket-launch",
         state_class=SensorStateClass.TOTAL,
     ),
     MakerWorldSensorDescription(
