@@ -36,6 +36,13 @@ def _normalise_cookie(raw: str) -> str:
     return cookie.strip().replace("\r", "").replace("\n", "").replace("\t", "")
 
 
+def _compact_snippet(text: str, max_len: int = 300) -> str:
+    compact = " ".join((text or "").split())
+    if len(compact) <= max_len:
+        return compact
+    return compact[:max_len] + "...(truncated)"
+
+
 def _deep_get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
     cur: Any = d
     for key in path.split("."):
@@ -169,10 +176,44 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _fetch_html(self, url: str, timeout: int) -> str:
         headers = {"User-Agent": self._user_agent, "Cookie": self._cookie}
+        _LOGGER.debug(
+            "MakerWorld request start: url=%s timeout=%ss cookie_len=%s ua=%s",
+            url,
+            timeout,
+            len(self._cookie),
+            self._user_agent,
+        )
         async with async_timeout.timeout(timeout):
             async with self._session.get(url, headers=headers) as resp:
+                body = await resp.text()
+                if resp.status >= 400:
+                    hist = [str(h.url) for h in resp.history]
+                    _LOGGER.warning(
+                        (
+                            "MakerWorld HTTP error: status=%s reason=%s request_url=%s "
+                            "response_url=%s redirects=%s content_type=%s server=%s cf_ray=%s "
+                            "location=%s body_snippet=%s"
+                        ),
+                        resp.status,
+                        resp.reason,
+                        url,
+                        resp.url,
+                        hist,
+                        resp.headers.get("content-type"),
+                        resp.headers.get("server"),
+                        resp.headers.get("cf-ray"),
+                        resp.headers.get("location"),
+                        _compact_snippet(body),
+                    )
                 resp.raise_for_status()
-                return await resp.text()
+                _LOGGER.debug(
+                    "MakerWorld request success: request_url=%s response_url=%s status=%s body_len=%s",
+                    url,
+                    resp.url,
+                    resp.status,
+                    len(body),
+                )
+                return body
 
     async def _fetch_next_data(self, url: str, timeout: int) -> Dict[str, Any]:
         html = await self._fetch_html(url, timeout)
@@ -190,12 +231,20 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         attempts: List[str] = []
 
         for url in urls:
+            _LOGGER.debug("Trying %s candidate URL: %s", label, url)
             try:
                 data = await self._fetch_next_data(url, timeout)
+                _LOGGER.debug(
+                    "Selected %s candidate URL: %s (top-level keys: %s)",
+                    label,
+                    url,
+                    list(data.keys()) if isinstance(data, dict) else type(data),
+                )
                 return data, url
             except Exception as err:
                 last_err = err
                 attempts.append(f"{url}: {err}")
+                _LOGGER.debug("Failed %s candidate URL %s: %s", label, url, err)
                 if isinstance(err, ClientResponseError) and err.status not in (403, 404):
                     raise
 
@@ -216,12 +265,20 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         attempts: List[str] = []
 
         for url in urls:
+            _LOGGER.debug("Trying %s candidate URL: %s", label, url)
             try:
                 html = await self._fetch_html(url, timeout)
+                _LOGGER.debug(
+                    "Selected %s candidate URL: %s (html_len=%s)",
+                    label,
+                    url,
+                    len(html),
+                )
                 return html, url
             except Exception as err:
                 last_err = err
                 attempts.append(f"{url}: {err}")
+                _LOGGER.debug("Failed %s candidate URL %s: %s", label, url, err)
                 if isinstance(err, ClientResponseError) and err.status not in (403, 404):
                     raise
 
@@ -265,12 +322,24 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 f"https://makerworld.com/@{self._user}/upload",
             ]
             timeout = 20
+            _LOGGER.debug(
+                "Starting MakerWorld refresh for user='%s' profile_candidates=%s upload_candidates=%s",
+                self._user,
+                profile_urls,
+                upload_urls,
+            )
 
             profile_nd, profile_url = await self._fetch_next_data_from_candidates(
                 profile_urls, timeout, "profile"
             )
             user_info = _deep_get(profile_nd, "props.pageProps.userInfo")
             if not isinstance(user_info, dict):
+                _LOGGER.debug(
+                    "profile data keys under props.pageProps: %s",
+                    list(_deep_get(profile_nd, "props.pageProps", {}).keys())
+                    if isinstance(_deep_get(profile_nd, "props.pageProps", {}), dict)
+                    else type(_deep_get(profile_nd, "props.pageProps", {})),
+                )
                 raise UpdateFailed("props.pageProps.userInfo not found")
 
             points = (
@@ -301,6 +370,11 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                     upload_urls, timeout, "upload data"
                 )
                 refs_nd = _collect_model_refs_from_next_data(upload_nd)
+                _LOGGER.debug(
+                    "Upload refs extracted: html=%s next_data=%s",
+                    len(refs_html),
+                    len(refs_nd),
+                )
             except UpdateFailed as err:
                 _LOGGER.warning(
                     "Failed to load upload data for user '%s'; continuing with profile summary only. "
@@ -316,15 +390,22 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
             model_refs = list(merged.items())
             model_refs.sort(key=lambda x: x[0][0])
+            _LOGGER.debug("Merged model refs before max_models limit: %s", len(model_refs))
 
             if self._max_models and self._max_models > 0:
                 model_refs = model_refs[: self._max_models]
+                _LOGGER.debug(
+                    "Applied max_models=%s, scanning refs=%s",
+                    self._max_models,
+                    len(model_refs),
+                )
 
             models: List[Dict[str, Any]] = []
             for (mid, slug), title in model_refs:
                 try:
                     models.append(await self._fetch_model_metrics(mid, slug, title, timeout))
                 except Exception:
+                    _LOGGER.debug("Failed model metrics fetch for id=%s slug=%s", mid, slug)
                     continue
 
             top = {
@@ -364,4 +445,5 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             _LOGGER.debug("Coordinator data keys: %s", data.keys())
             return data
         except Exception as err:
+            _LOGGER.exception("MakerWorld refresh failed for user '%s': %s", self._user, err)
             raise UpdateFailed(str(err)) from err
