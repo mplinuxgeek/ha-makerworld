@@ -45,4 +45,24 @@ Options:
 
 This integration scrapes MakerWorld pages and requires a valid session cookie. MakerWorld may change its site structure, which can break parsing.
 
+## Local debug script (no HA restart)
+
+Use the script below to test the scraping/parsing flow directly while you edit code:
+
+```bash
+python3 scripts/debug_makerworld.py --user YOUR_USER --cookie 'name=value; ...'
+```
+
+Or keep cookie in a file:
+
+```bash
+python3 scripts/debug_makerworld.py --user YOUR_USER --cookie-file /path/to/cookie.txt
+```
+
+Useful flags:
+
+- `--json` prints full parsed payload (including debug fields and per-model parse errors).
+- `--max-models 10` limits model fetches for faster iteration.
+- `--timeout 30` increases HTTP timeout.
+
 **Warning:** MakerWorld includes ban/permission fields in their user data, which suggests they may monitor for "unapproved" access methods. While this integration uses standard web requests with your session cookie, there is no guarantee that using it won't result in account restrictions or bans. Use at your own risk.
