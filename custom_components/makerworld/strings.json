@@ -1,6 +1,17 @@
 {
   "config": {
+    "abort": {
+      "reconfigure_successful": "Configuration updated"
+    },
     "step": {
+      "reconfigure": {
+        "title": "Update MakerWorld connection",
+        "description": "Update your MakerWorld cookie and optional user agent.",
+        "data": {
+          "cookie": "Cookie",
+          "user_agent": "User agent"
+        }
+      },
       "user": {
         "title": "MakerWorld",
         "description": "Enter your MakerWorld username and cookie.",

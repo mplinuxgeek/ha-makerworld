@@ -9,12 +9,22 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, PLATFORMS
+from .const import CONF_COOKIE, DEFAULT_SCAN_INTERVAL, DOMAIN, PLATFORMS
 from .coordinator import MakerWorldDataUpdateCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up MakerWorld from a config entry."""
+    # Migration: cookie used to be stored in options; keep one source of truth in entry data.
+    if CONF_COOKIE in entry.options:
+        new_data = dict(entry.data)
+        opt_cookie = entry.options.get(CONF_COOKIE)
+        if isinstance(opt_cookie, str) and opt_cookie.strip():
+            new_data[CONF_COOKIE] = opt_cookie
+        new_options = dict(entry.options)
+        new_options.pop(CONF_COOKIE, None)
+        hass.config_entries.async_update_entry(entry, data=new_data, options=new_options)
+
     session = async_get_clientsession(hass)
 
     coordinator: DataUpdateCoordinator = MakerWorldDataUpdateCoordinator(

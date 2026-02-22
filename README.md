@@ -30,7 +30,7 @@ The config flow will prompt for:
 Options:
 
 - Max models to scan (0 = all)
-- Cookie (use this to update an expired cookie)
+- To update cookie/user-agent later, use **Configure** on the integration/device.
 
 ## Getting the cookie
 
@@ -39,7 +39,7 @@ Options:
 3. Go to the Network tab and refresh the page.
 4. Click any request to `makerworld.com`.
 5. In the request headers, copy the full `Cookie` header value (everything after `Cookie:`).
-6. Paste it into the integration setup or options.
+6. Paste it into integration setup, or later into Configure.
 
 ## Notes
 

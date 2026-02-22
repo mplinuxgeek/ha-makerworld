@@ -43,6 +43,13 @@ def _compact_snippet(text: str, max_len: int = 300) -> str:
     return compact[:max_len] + "...(truncated)"
 
 
+def _cookie_fingerprint(cookie: str) -> str:
+    """Short non-reversible cookie identifier for debug logs."""
+    if not cookie:
+        return "empty"
+    return f"len={len(cookie)} prefix={cookie[:8]!r} suffix={cookie[-8:]!r}"
+
+
 def _deep_get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
     cur: Any = d
     for key in path.split("."):
@@ -164,17 +171,14 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         )
         self._session = session
         self._user = config[CONF_USER].lstrip("@")
-        cookie_opt = options.get(CONF_COOKIE)
-        cookie = cookie_opt if isinstance(cookie_opt, str) and cookie_opt.strip() else config[CONF_COOKIE]
-        self._cookie = _normalise_cookie(cookie)
+        self._cookie = _normalise_cookie(config.get(CONF_COOKIE, ""))
         self._user_agent = config.get(CONF_USER_AGENT, DEFAULT_UA)
         self._max_models = options.get(CONF_MAX_MODELS, DEFAULT_MAX_MODELS)
         self._last_update = None
         _LOGGER.debug(
-            "MakerWorld coordinator init: user=%s cookie_source=%s cookie_len=%s",
+            "MakerWorld coordinator init: user=%s cookie=%s",
             self._user,
-            "options" if isinstance(cookie_opt, str) and cookie_opt.strip() else "config",
-            len(self._cookie),
+            _cookie_fingerprint(self._cookie),
         )
 
     @property
@@ -184,10 +188,10 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     async def _fetch_html(self, url: str, timeout: int) -> str:
         headers = {"User-Agent": self._user_agent, "Cookie": self._cookie}
         _LOGGER.debug(
-            "MakerWorld request start: url=%s timeout=%ss cookie_len=%s ua=%s",
+            "MakerWorld request start: url=%s timeout=%ss cookie=%s ua=%s",
             url,
             timeout,
-            len(self._cookie),
+            _cookie_fingerprint(self._cookie),
             self._user_agent,
         )
         async with async_timeout.timeout(timeout):
@@ -199,7 +203,7 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         (
                             "MakerWorld HTTP error: status=%s reason=%s request_url=%s "
                             "response_url=%s redirects=%s content_type=%s server=%s cf_ray=%s "
-                            "location=%s body_snippet=%s"
+                            "location=%s cookie=%s body_snippet=%s"
                         ),
                         resp.status,
                         resp.reason,
@@ -210,6 +214,7 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         resp.headers.get("server"),
                         resp.headers.get("cf-ray"),
                         resp.headers.get("location"),
+                        _cookie_fingerprint(self._cookie),
                         _compact_snippet(body),
                     )
                 resp.raise_for_status()

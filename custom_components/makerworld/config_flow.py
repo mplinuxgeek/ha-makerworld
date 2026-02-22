@@ -49,6 +49,34 @@ class MakerWorldConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
+    async def async_step_reconfigure(self, user_input=None) -> FlowResult:
+        """Handle reconfiguration from the integration/device configure action."""
+        entry = self._get_reconfigure_entry()
+        errors = {}
+
+        if user_input is not None:
+            new_data = {
+                **entry.data,
+                CONF_COOKIE: user_input[CONF_COOKIE],
+                CONF_USER_AGENT: user_input.get(CONF_USER_AGENT, DEFAULT_UA),
+            }
+            self.hass.config_entries.async_update_entry(entry, data=new_data)
+            return self.async_abort(reason="reconfigure_successful")
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_COOKIE,
+                    default=entry.data.get(CONF_COOKIE, ""),
+                ): str,
+                vol.Optional(
+                    CONF_USER_AGENT,
+                    default=entry.data.get(CONF_USER_AGENT, DEFAULT_UA),
+                ): str,
+            }
+        )
+        return self.async_show_form(step_id="reconfigure", data_schema=schema, errors=errors)
+
     @staticmethod
     def async_get_options_flow(config_entry: config_entries.ConfigEntry):
         return MakerWorldOptionsFlowHandler(config_entry)
@@ -63,20 +91,12 @@ class MakerWorldOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            data = dict(user_input)
-            cookie = data.get(CONF_COOKIE, "")
-            if isinstance(cookie, str) and not cookie.strip():
-                data.pop(CONF_COOKIE, None)
-            return self.async_create_entry(title="", data=data)
+            return self.async_create_entry(title="", data=user_input)
 
         current_max = self._entry.options.get(CONF_MAX_MODELS, DEFAULT_MAX_MODELS)
-        current_cookie = self._entry.options.get(
-            CONF_COOKIE, self._entry.data.get(CONF_COOKIE, "")
-        )
 
         schema = vol.Schema(
             {
-                vol.Optional(CONF_COOKIE, default=current_cookie): str,
                 vol.Optional(CONF_MAX_MODELS, default=current_max): vol.Coerce(int),
             }
         )
