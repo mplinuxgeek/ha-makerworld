@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from urllib.parse import urlparse
 
 import async_timeout
 from aiohttp import ClientResponseError
@@ -48,6 +49,24 @@ def _cookie_fingerprint(cookie: str) -> str:
     if not cookie:
         return "empty"
     return f"len={len(cookie)} prefix={cookie[:8]!r} suffix={cookie[-8:]!r}"
+
+
+def _is_cloudflare_challenge(
+    status: int, headers: Dict[str, str], body: str
+) -> bool:
+    """Detect Cloudflare managed challenge pages."""
+    if status != 403:
+        return False
+    cf_mitigated = (headers.get("cf-mitigated") or "").lower()
+    if "challenge" in cf_mitigated:
+        return True
+
+    body_l = (body or "").lower()
+    return (
+        "just a moment" in body_l
+        or "enable javascript and cookies to continue" in body_l
+        or "/cdn-cgi/challenge-platform/" in body_l
+    )
 
 
 def _deep_get(d: Dict[str, Any], path: str, default: Any = None) -> Any:
@@ -185,8 +204,32 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
     def last_update(self):
         return self._last_update
 
+    def _build_headers(self, url: str) -> Dict[str, str]:
+        """Build browser-like request headers."""
+        parsed = urlparse(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}" if parsed.scheme and parsed.netloc else "https://makerworld.com"
+        return {
+            "User-Agent": self._user_agent,
+            "Cookie": self._cookie,
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                "image/avif,image/webp,image/apng,*/*;q=0.8"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Referer": f"{origin}/",
+            "Origin": origin,
+        }
+
     async def _fetch_html(self, url: str, timeout: int) -> str:
-        headers = {"User-Agent": self._user_agent, "Cookie": self._cookie}
+        headers = self._build_headers(url)
         _LOGGER.debug(
             "MakerWorld request start: url=%s timeout=%ss cookie=%s ua=%s",
             url,
@@ -199,11 +242,14 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 body = await resp.text()
                 if resp.status >= 400:
                     hist = [str(h.url) for h in resp.history]
+                    cloudflare_challenge = _is_cloudflare_challenge(
+                        resp.status, dict(resp.headers), body
+                    )
                     _LOGGER.warning(
                         (
                             "MakerWorld HTTP error: status=%s reason=%s request_url=%s "
                             "response_url=%s redirects=%s content_type=%s server=%s cf_ray=%s "
-                            "location=%s cookie=%s body_snippet=%s"
+                            "cf_mitigated=%s cloudflare_challenge=%s location=%s cookie=%s body_snippet=%s"
                         ),
                         resp.status,
                         resp.reason,
@@ -213,10 +259,17 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                         resp.headers.get("content-type"),
                         resp.headers.get("server"),
                         resp.headers.get("cf-ray"),
+                        resp.headers.get("cf-mitigated"),
+                        cloudflare_challenge,
                         resp.headers.get("location"),
                         _cookie_fingerprint(self._cookie),
                         _compact_snippet(body),
                     )
+                    if cloudflare_challenge:
+                        raise UpdateFailed(
+                            "Blocked by Cloudflare challenge (cf-mitigated=challenge). "
+                            "This requires a real browser/JavaScript flow and cannot be solved by aiohttp."
+                        )
                 resp.raise_for_status()
                 _LOGGER.debug(
                     "MakerWorld request success: request_url=%s response_url=%s status=%s body_len=%s",
@@ -257,6 +310,8 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 last_err = err
                 attempts.append(f"{url}: {err}")
                 _LOGGER.debug("Failed %s candidate URL %s: %s", label, url, err)
+                if isinstance(err, UpdateFailed) and "Cloudflare challenge" in str(err):
+                    raise
                 if isinstance(err, ClientResponseError) and err.status not in (403, 404):
                     raise
 
@@ -291,6 +346,8 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 last_err = err
                 attempts.append(f"{url}: {err}")
                 _LOGGER.debug("Failed %s candidate URL %s: %s", label, url, err)
+                if isinstance(err, UpdateFailed) and "Cloudflare challenge" in str(err):
+                    raise
                 if isinstance(err, ClientResponseError) and err.status not in (403, 404):
                     raise
 
