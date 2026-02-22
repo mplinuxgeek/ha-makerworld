@@ -164,11 +164,18 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
         )
         self._session = session
         self._user = config[CONF_USER].lstrip("@")
-        cookie = options.get(CONF_COOKIE, config[CONF_COOKIE])
+        cookie_opt = options.get(CONF_COOKIE)
+        cookie = cookie_opt if isinstance(cookie_opt, str) and cookie_opt.strip() else config[CONF_COOKIE]
         self._cookie = _normalise_cookie(cookie)
         self._user_agent = config.get(CONF_USER_AGENT, DEFAULT_UA)
         self._max_models = options.get(CONF_MAX_MODELS, DEFAULT_MAX_MODELS)
         self._last_update = None
+        _LOGGER.debug(
+            "MakerWorld coordinator init: user=%s cookie_source=%s cookie_len=%s",
+            self._user,
+            "options" if isinstance(cookie_opt, str) and cookie_opt.strip() else "config",
+            len(self._cookie),
+        )
 
     @property
     def last_update(self):

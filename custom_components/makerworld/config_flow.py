@@ -63,10 +63,16 @@ class MakerWorldOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input=None) -> FlowResult:
         """Manage the options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            data = dict(user_input)
+            cookie = data.get(CONF_COOKIE, "")
+            if isinstance(cookie, str) and not cookie.strip():
+                data.pop(CONF_COOKIE, None)
+            return self.async_create_entry(title="", data=data)
 
         current_max = self._entry.options.get(CONF_MAX_MODELS, DEFAULT_MAX_MODELS)
-        current_cookie = self._entry.options.get(CONF_COOKIE, "")
+        current_cookie = self._entry.options.get(
+            CONF_COOKIE, self._entry.data.get(CONF_COOKIE, "")
+        )
 
         schema = vol.Schema(
             {
