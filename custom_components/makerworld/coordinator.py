@@ -8,6 +8,7 @@ import re
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import async_timeout
+from aiohttp import ClientResponseError
 from bs4 import BeautifulSoup
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -181,6 +182,52 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
             raise UpdateFailed(f"__NEXT_DATA__ not found for {url}")
         return json.loads(node.string)
 
+    async def _fetch_next_data_from_candidates(
+        self, urls: List[str], timeout: int, label: str
+    ) -> Tuple[Dict[str, Any], str]:
+        """Fetch __NEXT_DATA__ using the first working URL candidate."""
+        last_err: Optional[Exception] = None
+        attempts: List[str] = []
+
+        for url in urls:
+            try:
+                data = await self._fetch_next_data(url, timeout)
+                return data, url
+            except Exception as err:
+                last_err = err
+                attempts.append(f"{url}: {err}")
+                if isinstance(err, ClientResponseError) and err.status not in (403, 404):
+                    raise
+
+        if isinstance(last_err, ClientResponseError) and last_err.status == 403:
+            raise UpdateFailed(
+                f"{label} blocked with 403 on all known URLs. "
+                "The MakerWorld cookie is likely expired or missing permissions."
+            ) from last_err
+
+        detail = "; ".join(attempts) if attempts else "no attempts made"
+        raise UpdateFailed(f"Failed to fetch {label}: {detail}") from last_err
+
+    async def _fetch_html_from_candidates(
+        self, urls: List[str], timeout: int, label: str
+    ) -> Tuple[str, str]:
+        """Fetch HTML using the first working URL candidate."""
+        last_err: Optional[Exception] = None
+        attempts: List[str] = []
+
+        for url in urls:
+            try:
+                html = await self._fetch_html(url, timeout)
+                return html, url
+            except Exception as err:
+                last_err = err
+                attempts.append(f"{url}: {err}")
+                if isinstance(err, ClientResponseError) and err.status not in (403, 404):
+                    raise
+
+        detail = "; ".join(attempts) if attempts else "no attempts made"
+        raise UpdateFailed(f"Failed to fetch {label}: {detail}") from last_err
+
     async def _fetch_model_metrics(
         self,
         mid: int,
@@ -209,11 +256,19 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
 
     async def _async_update_data(self) -> Dict[str, Any]:
         try:
-            profile_url = f"https://makerworld.com/en/@{self._user}"
-            upload_url = f"https://makerworld.com/en/@{self._user}/upload"
+            profile_urls = [
+                f"https://makerworld.com/en/@{self._user}",
+                f"https://makerworld.com/@{self._user}",
+            ]
+            upload_urls = [
+                f"https://makerworld.com/en/@{self._user}/upload",
+                f"https://makerworld.com/@{self._user}/upload",
+            ]
             timeout = 20
 
-            profile_nd = await self._fetch_next_data(profile_url, timeout)
+            profile_nd, profile_url = await self._fetch_next_data_from_candidates(
+                profile_urls, timeout, "profile"
+            )
             user_info = _deep_get(profile_nd, "props.pageProps.userInfo")
             if not isinstance(user_info, dict):
                 raise UpdateFailed("props.pageProps.userInfo not found")
@@ -234,11 +289,26 @@ class MakerWorldDataUpdateCoordinator(DataUpdateCoordinator[Dict[str, Any]]):
                 "Boosts Received": user_info.get("boostGained"),
             }
 
-            upload_html = await self._fetch_html(upload_url, timeout)
-            refs_html = _collect_model_refs_from_upload_html(upload_html)
+            refs_html: Set[Tuple[int, str]] = set()
+            refs_nd: Dict[Tuple[int, str], Optional[str]] = {}
+            try:
+                upload_html, _ = await self._fetch_html_from_candidates(
+                    upload_urls, timeout, "upload page"
+                )
+                refs_html = _collect_model_refs_from_upload_html(upload_html)
 
-            upload_nd = await self._fetch_next_data(upload_url, timeout)
-            refs_nd = _collect_model_refs_from_next_data(upload_nd)
+                upload_nd, _ = await self._fetch_next_data_from_candidates(
+                    upload_urls, timeout, "upload data"
+                )
+                refs_nd = _collect_model_refs_from_next_data(upload_nd)
+            except UpdateFailed as err:
+                _LOGGER.warning(
+                    "Failed to load upload data for user '%s'; continuing with profile summary only. "
+                    "Profile URL: %s. Error: %s",
+                    self._user,
+                    profile_url,
+                    err,
+                )
 
             merged: Dict[Tuple[int, str], Optional[str]] = dict(refs_nd)
             for mid, slug in refs_html:
